@@ -1,6 +1,14 @@
 
 from uuid import uuid4
 
+from backend.app.services.hybrid_retrieval_service import (
+    hybrid_search_chunks,
+)
+
+from backend.app.services.semantic_retrieval_service import (
+    semantic_search_chunks,
+)
+
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 
 from backend.app.database.database import initialize_database
@@ -270,4 +278,55 @@ def search_documents(
         raise HTTPException(
             status_code=500,
             detail="Search operation failed.",
+        )
+
+
+@app.get("/search/semantic")
+def semantic_search_documents(
+    q: str = Query(..., min_length=1),
+    limit: int = Query(default=5, ge=1, le=50),
+):
+
+    try:
+        results = semantic_search_chunks(
+            query=q,
+            limit=limit,
+        )
+
+        return {
+            "query": q,
+            "search_type": "semantic",
+            "result_count": len(results),
+            "results": results,
+        }
+
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Semantic search operation failed.",
+        )
+
+
+@app.get("/search/hybrid")
+def hybrid_search_documents(
+    q: str = Query(..., min_length=1),
+    limit: int = Query(default=5, ge=1, le=50),
+):
+    try:
+        results = hybrid_search_chunks(
+            query=q,
+            limit=limit,
+        )
+
+        return {
+            "query": q,
+            "search_type": "hybrid",
+            "result_count": len(results),
+            "results": results,
+        }
+
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Hybrid search operation failed.",
         )

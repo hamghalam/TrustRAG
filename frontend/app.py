@@ -36,6 +36,12 @@ st.markdown(
 if "selected_document" not in st.session_state:
     st.session_state.selected_document = None
 
+if "search_response" not in st.session_state:
+    st.session_state.search_response = None
+
+if "search_error" not in st.session_state:
+    st.session_state.search_error = None
+
 
 # --------------------------------------------------
 # Backend Status
@@ -135,6 +141,13 @@ if uploaded_file is not None:
                     result["document_id"][:8],
                 )
 
+                if "embedding_count" in result:
+
+                    st.caption(
+                        f"Generated embeddings: "
+                        f"{result['embedding_count']}"
+                    )
+
                 st.divider()
 
                 st.subheader("Generated Chunks")
@@ -151,6 +164,10 @@ if uploaded_file is not None:
                         )
 
                         st.write(chunk["text"])
+
+                # Refresh the document library after upload.
+                if "documents" in st.session_state:
+                    del st.session_state.documents
 
             except requests.RequestException as error:
 
@@ -190,7 +207,8 @@ with col2:
     st.subheader("🔍 Retrieval")
 
     st.write(
-        "Search documents using semantic and keyword retrieval."
+        "Search documents using BM25, semantic "
+        "similarity, and hybrid retrieval."
     )
 
 with col3:
@@ -202,116 +220,250 @@ with col3:
     )
 
 
-# -----------------------------
+# --------------------------------------------------
 # Document Search
-# -----------------------------
+# --------------------------------------------------
 
 st.divider()
+
 st.header("🔍 Search Documents")
 
 st.write(
-    "Search across your uploaded documents using keyword matching."
+    "Search your knowledge base using keyword matching, "
+    "semantic similarity, or hybrid retrieval."
 )
-
-if "search_response" not in st.session_state:
-    st.session_state.search_response = None
-
-if "search_error" not in st.session_state:
-    st.session_state.search_error = None
 
 search_query = st.text_input(
     "Enter keywords or a question",
-    placeholder="e.g., diabetes treatment, medical imaging",
+    placeholder="e.g., What are the symptoms of diabetes?",
     key="document_search_query",
 )
+
+search_mode = st.radio(
+    "Retrieval method",
+    options=[
+        "Keyword (BM25)",
+        "Semantic",
+        "Hybrid (BM25 + Semantic)",
+    ],
+    horizontal=True,
+    key="search_mode",
+)
+
+search_endpoints = {
+    "Keyword (BM25)": "/search",
+    "Semantic": "/search/semantic",
+    "Hybrid (BM25 + Semantic)": "/search/hybrid",
+}
 
 search_col1, search_col2 = st.columns([1, 5])
 
 with search_col1:
+
     search_button = st.button(
         "Search",
         type="primary",
         use_container_width=True,
     )
 
+
+# --------------------------------------------------
+# Execute Search
+# --------------------------------------------------
+
 if search_button:
+
     if not search_query.strip():
-        st.session_state.search_error = "Please enter a search query."
+
+        st.session_state.search_error = (
+            "Please enter a search query."
+        )
+
         st.session_state.search_response = None
 
     else:
+
+        endpoint = search_endpoints[search_mode]
+
         try:
-            response = requests.get(
-                f"{API_URL}/search",
-                params={
-                    "q": search_query.strip(),
-                    "limit": 5,
-                },
-                timeout=15,
-            )
 
-            response.raise_for_status()
+            with st.spinner(
+                f"Searching using {search_mode}..."
+            ):
 
-            st.session_state.search_response = response.json()
-            st.session_state.search_error = None
+                response = requests.get(
+                    f"{API_URL}{endpoint}",
+                    params={
+                        "q": search_query.strip(),
+                        "limit": 5,
+                    },
+                    timeout=60,
+                )
+
+                response.raise_for_status()
+
+                search_data = response.json()
+
+                search_data["search_mode"] = search_mode
+
+                st.session_state.search_response = search_data
+
+                st.session_state.search_error = None
 
         except requests.exceptions.RequestException as error:
+
             st.session_state.search_error = (
                 f"Search request failed: {error}"
             )
+
             st.session_state.search_response = None
 
         except ValueError:
+
             st.session_state.search_error = (
                 "The API returned an invalid response."
             )
+
             st.session_state.search_response = None
 
 
-# Display search errors
+# --------------------------------------------------
+# Display Search Errors
+# --------------------------------------------------
+
 if st.session_state.search_error:
-    st.error(st.session_state.search_error)
+
+    st.error(
+        st.session_state.search_error
+    )
 
 
-# Display search results
+# --------------------------------------------------
+# Display Search Results
+# --------------------------------------------------
+
 if st.session_state.search_response is not None:
 
     search_data = st.session_state.search_response
 
-    st.subheader(
-        f"Results ({search_data['result_count']})"
+    result_count = search_data["result_count"]
+
+    result_mode = search_data.get(
+        "search_mode",
+        "Keyword (BM25)",
     )
 
-    if search_data["result_count"] == 0:
-        st.info("No matching chunks found. Try different keywords.")
+    st.subheader(
+        f"Results ({result_count})"
+    )
+
+    st.caption(
+        f"Retrieval method: {result_mode}"
+    )
+
+    if result_count == 0:
+
+        st.info(
+            "No matching chunks found. "
+            "Try a different query or retrieval method."
+        )
 
     else:
-        for index, result in enumerate(search_data["results"], start=1):
 
-            st.markdown(f"**Result {index}**")
+        for index, result in enumerate(
+            search_data["results"],
+            start=1,
+        ):
+
+            st.markdown(
+                f"**Result {index}**"
+            )
 
             st.markdown(
                 f"**Source:** {result['filename']}  \n"
                 f"**Page:** {result['page_number']}  \n"
-                f"**Chunk:** {result['chunk_index']}  \n"
-                f"**Relevance score:** {result['score']:.2f}"
+                f"**Chunk:** {result['chunk_index'] + 1}"
             )
 
-            matched_terms = result.get("matched_terms", [])
+            # Semantic Retrieval
+            if result_mode == "Semantic":
 
-            if matched_terms:
-                st.caption(
-                    "Matched keywords: "
-                    + ", ".join(matched_terms)
+                st.metric(
+                    "Cosine similarity",
+                    f"{result['score']:.4f}",
                 )
 
+            # Hybrid Retrieval
+            elif result_mode == "Hybrid (BM25 + Semantic)":
+
+                st.metric(
+                    "RRF score",
+                    f"{result['rrf_score']:.10f}",
+                )
+
+                col1, col2 = st.columns(2)
+
+                bm25_score = result.get("bm25_score")
+
+                semantic_score = result.get("semantic_score")
+
+                col1.metric(
+                    "BM25 score",
+                    (
+                        f"{bm25_score:.4f}"
+                        if bm25_score is not None
+                        else "N/A"
+                    ),
+                )
+
+                col2.metric(
+                    "Semantic score",
+                    (
+                        f"{semantic_score:.4f}"
+                        if semantic_score is not None
+                        else "N/A"
+                    ),
+                )
+
+                methods = result.get(
+                    "retrieval_methods",
+                    [],
+                )
+
+                if methods:
+
+                    st.caption(
+                        "Retrieved by: "
+                        + ", ".join(methods)
+                    )
+
+            # Keyword Retrieval
+            else:
+
+                st.metric(
+                    "BM25 relevance score",
+                    f"{result['score']:.4f}",
+                )
+
+                matched_terms = result.get(
+                    "matched_terms",
+                    [],
+                )
+
+                if matched_terms:
+
+                    st.caption(
+                        "Matched keywords: "
+                        + ", ".join(matched_terms)
+                    )
+
             with st.expander("View matching text"):
-                st.write(result["text"])
+
+                st.write(
+                    result["text"]
+                )
 
             st.divider()
-
-
-
 
 
 # --------------------------------------------------
@@ -325,6 +477,7 @@ st.header("📚 Document Library")
 if st.button("Refresh Document Library"):
 
     try:
+
         response = requests.get(
             f"{API_URL}/documents",
             timeout=10,
@@ -352,7 +505,9 @@ if st.button("Refresh Document Library"):
             )
 
 
-# Display documents stored in session state
+# --------------------------------------------------
+# Display Document Library
+# --------------------------------------------------
 
 if "documents" in st.session_state:
 
@@ -425,6 +580,7 @@ if "documents" in st.session_state:
                 ):
 
                     try:
+
                         delete_response = requests.delete(
                             f"{API_URL}/documents/"
                             f"{document['document_id']}",
@@ -475,6 +631,7 @@ if selected_document_id:
     st.header("📄 Document Details")
 
     try:
+
         detail_response = requests.get(
             f"{API_URL}/documents/{selected_document_id}",
             timeout=15,
@@ -529,7 +686,9 @@ if selected_document_id:
                         f"Chunk ID: {chunk['chunk_id']}"
                     )
 
-                    st.write(chunk["text"])
+                    st.write(
+                        chunk["text"]
+                    )
 
         if st.button("Close Document Details"):
 
