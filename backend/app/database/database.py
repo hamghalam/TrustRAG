@@ -48,3 +48,16 @@ def initialize_database():
             CREATE INDEX IF NOT EXISTS idx_chunks_document_id
             ON chunks(document_id)
         """)
+
+
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS chunk_embeddings (
+                chunk_id TEXT PRIMARY KEY,
+                embedding TEXT NOT NULL,
+                model_name TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (chunk_id)
+                    REFERENCES chunks(chunk_id)
+                    ON DELETE CASCADE
+            )
+        """)
