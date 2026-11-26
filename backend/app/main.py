@@ -1,5 +1,8 @@
 
 from uuid import uuid4
+from backend.app.services.document_storage import save_document
+
+from backend.app.database.database import initialize_database
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 
@@ -19,6 +22,9 @@ app = FastAPI(
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
+@app.on_event("startup")
+def startup_event():
+    initialize_database()
 
 @app.get("/")
 def root():
@@ -37,8 +43,10 @@ def health_check():
     }
 
 
+
 @app.post("/documents/upload")
 async def upload_document(file: UploadFile = File(...)):
+
     # 1. Validate filename
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(
@@ -87,7 +95,7 @@ async def upload_document(file: UploadFile = File(...)):
     # 6. Generate document ID
     document_id = str(uuid4())
 
-    # 7. Split each page into chunks
+    # 7. Generate chunks
     chunks = []
 
     for page in pages:
@@ -102,11 +110,27 @@ async def upload_document(file: UploadFile = File(...)):
                 "text": chunk,
             })
 
-    # 8. Return processing result
+    # 8. Save document and chunks in SQLite
+    try:
+        save_document(
+            document_id=document_id,
+            filename=file.filename,
+            page_count=len(pages),
+            chunks=chunks,
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to save document in database.",
+        )
+
+    # 9. Return processing result
     return {
         "document_id": document_id,
         "filename": file.filename,
         "page_count": len(pages),
         "chunk_count": len(chunks),
+        "status": "stored",
         "chunks": chunks,
     }
+
