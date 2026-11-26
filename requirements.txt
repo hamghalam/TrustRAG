@@ -1,0 +1,6 @@
+-r backend/requirements.txt
+
+streamlit
+requests
+pytest
+pypdf
