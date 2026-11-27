@@ -1,6 +1,17 @@
 
 from uuid import uuid4
 
+from pydantic import BaseModel, Field
+
+from backend.app.services.context_service import (
+    retrieve_and_assemble_context,
+)
+
+from backend.app.services.llm_service import (
+    generate_grounded_answer,
+    LLMProviderError,
+)
+
 from backend.app.services.hybrid_retrieval_service import (
     hybrid_search_chunks,
 )
@@ -31,6 +42,17 @@ from backend.app.services.embedding_service import (
     generate_embeddings,
     MODEL_NAME,
 )
+
+
+class AskRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+    limit: int = Field(default=5, ge=1, le=20)
+    max_context_chars: int = Field(
+        default=8000,
+        ge=500,
+        le=20000,
+    )
+    
 
 
 app = FastAPI(
@@ -330,3 +352,52 @@ def hybrid_search_documents(
             status_code=500,
             detail="Hybrid search operation failed.",
         )
+        
+@app.post("/ask")
+def ask_documents(request: AskRequest):
+
+    if not request.query.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Query cannot be empty.",
+        )
+
+    try:
+        context_bundle = retrieve_and_assemble_context(
+            query=request.query,
+            limit=request.limit,
+            max_context_chars=request.max_context_chars,
+        )
+
+        result = generate_grounded_answer(
+            context_bundle=context_bundle,
+        )
+
+        return {
+            "query": result["query"],
+            "answer": result["answer"],
+            "model": result["model"],
+            "source_count": len(result["sources"]),
+            "sources": result["sources"],
+            "context_char_count": (
+                context_bundle["context_char_count"]
+            ),
+        }
+
+    except LLMProviderError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=str(exc),
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
+
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Question answering operation failed.",
+        )        

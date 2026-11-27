@@ -2,59 +2,66 @@
 
 ### A Quality, Security & Evaluation Platform for Production RAG Systems
 
-TrustRAG is an open-source project focused on building and improving reliable Retrieval-Augmented Generation (RAG) systems.
+TrustRAG is a publicly available software project under active development, focused on building, evaluating, and improving reliable Retrieval-Augmented Generation (RAG) systems.
 
 It provides a modular foundation for document ingestion, hybrid information retrieval, context assembly, and LLM-based answer generation with source references.
 
-Unlike a standalone document chatbot, TrustRAG is being developed with a broader goal: helping developers understand, evaluate, and improve the quality, reliability, and security of production RAG applications.
+Unlike a standalone document chatbot, TrustRAG has a broader goal: helping developers understand, evaluate, and improve the quality, reliability, and security of production RAG applications.
 
-**Current development stage:** Functional MVP with PDF ingestion, BM25 and semantic retrieval, hybrid ranking, context assembly, local LLM integration, and a Streamlit question-answering interface.
+**Current development stage:** Functional MVP with PDF ingestion, BM25 and semantic retrieval, hybrid ranking, context assembly, local LLM integration, and an interactive Streamlit question-answering interface.
 
 ---
+
 ## Application Preview
 
 ![TrustRAG Dashboard Preview](assets/demo.jpeg)
 
 *Conceptual UI preview of the TrustRAG application.*
+
+---
+
 ## 1. Key Features
 
-### Document ingestion and management
+### Document Ingestion and Management
 
 - Upload PDF documents through the web interface.
-- Validate file type, PDF signature, and file size.
-- Extract text while retaining page-level information.
+- Validate file extensions, PDF signatures, and file sizes.
+- Extract text while preserving page-level information.
 - Split extracted text into overlapping chunks.
 - Generate embeddings for document chunks.
 - Store documents, chunks, and embeddings in SQLite.
 - View uploaded documents and their extracted chunks.
 - Delete documents and associated records.
 
-### Multiple retrieval strategies
+### Multiple Retrieval Strategies
 
 TrustRAG currently implements three retrieval approaches.
 
-**Keyword retrieval — BM25**
+**Keyword Retrieval — BM25**
 
 - Token-based keyword matching.
 - Term-frequency-based relevance scoring.
-- Inverse document frequency.
+- Inverse document frequency (IDF).
 - Document-length normalization.
+- Ranking of relevant document chunks.
 
-**Semantic retrieval**
+**Semantic Retrieval**
 
 - Local embedding generation using Sentence Transformers.
-- Model: `sentence-transformers/all-MiniLM-L6-v2`.
+- Embedding model: `sentence-transformers/all-MiniLM-L6-v2`.
 - 384-dimensional embeddings.
-- Normalized embeddings and cosine similarity.
+- Normalized embeddings.
+- Cosine similarity-based retrieval.
 - Local embedding storage in SQLite.
 
-**Hybrid retrieval — Reciprocal Rank Fusion**
+**Hybrid Retrieval — Reciprocal Rank Fusion (RRF)**
 
 - Combines BM25 and semantic retrieval rankings.
-- Uses Reciprocal Rank Fusion (RRF).
-- Combines ranked results without directly adding incompatible raw scores.
+- Uses Reciprocal Rank Fusion.
+- Combines ranked results without directly adding incompatible raw retrieval scores.
+- Produces a unified ranking of relevant chunks.
 
-### Context assembly
+### Context Assembly
 
 - Retrieves relevant chunks through hybrid retrieval.
 - Removes duplicate chunks.
@@ -63,23 +70,28 @@ TrustRAG currently implements three retrieval approaches.
 - Enforces a configurable context-length limit.
 - Returns structured source metadata for answer generation.
 
-### Grounded answer generation
+### Grounded Answer Generation
 
 - Integrates with locally hosted Ollama models.
-- Supports an OpenAI-compatible provider.
+- Supports an OpenAI-compatible LLM provider.
 - Uses retrieved document excerpts as generation context.
-- Instructs the LLM to answer using the supplied sources.
-- Requests citation references such as `[1]` and `[2]`.
-- Encourages the model to acknowledge insufficient information rather than invent an answer.
+- Instructs the LLM to answer using supplied sources.
+- Requests source references such as `[1]` and `[2]`.
+- Instructs the model to acknowledge insufficient information rather than invent an answer.
+- Treats retrieved document content as untrusted input rather than trusted system instructions.
 
-### Interactive web interface
+*Note: Grounding and citation behavior currently relies on prompt instructions. Independent verification of generated claims and citations is planned.*
+
+### Interactive Web Interface
 
 The Streamlit frontend supports:
 
 - PDF upload and processing.
 - Document library management.
 - Document and chunk inspection.
-- BM25, semantic, and hybrid search.
+- BM25 keyword search.
+- Semantic search.
+- Hybrid search.
 - Question answering through the `/ask` API.
 - Display of generated answers and supporting source metadata.
 
@@ -87,49 +99,42 @@ The Streamlit frontend supports:
 
 ## 2. Architecture
 
-```text
-                    Streamlit Frontend
-                           |
-             +-------------+-------------+
-             |             |             |
-             v             v             v
-        Documents       Search       Ask TrustRAG
-             |             |             |
-             +-------------+-------------+
-                           |
-                           v
-                      FastAPI API
-                           |
-             +-------------+-------------+
-             |             |             |
-             v             v             v
-       Document         Retrieval      LLM Service
-       Processing        Engine            |
-             |             |               |
-             v       +-----+------+        v
-        Text Chunks  |            |    Ollama /
-             |       v            v    OpenAI-compatible
-             |     BM25       Semantic       APIs
-             |       |        Retrieval       |
-             |       +-----+------+           |
-             |             |                  |
-             |             v                  |
-             |       Hybrid Retrieval         |
-             |             |                  |
-             |             v                  |
-             |       Context Assembly         |
-             |             |                  |
-             +-------------+------------------+
-                           |
-                           v
-                   Grounded Answer
-                    and Sources
-                           |
-                           v
-                        SQLite
+TrustRAG uses a modular architecture that separates document processing, retrieval, context assembly, persistence, and LLM generation.
+
+```mermaid
+flowchart TD
+    A["Streamlit Frontend"] --> B["FastAPI Backend"]
+
+    B --> C["Document Processing"]
+    B --> D["Retrieval Engine"]
+    B --> E["LLM Service"]
+
+    C --> F["PDF Text Extraction"]
+    F --> G["Text Chunking"]
+    G --> H["Embedding Generation"]
+
+    H --> I[("SQLite Database")]
+    G --> I
+
+    D --> J["BM25 Retrieval"]
+    D --> K["Semantic Retrieval"]
+
+    I --> J
+    I --> K
+
+    J --> L["Hybrid Retrieval - RRF"]
+    K --> L
+
+    L --> M["Context Assembly"]
+    M --> E
+
+    E --> N["Ollama / OpenAI-Compatible API"]
+
+    N --> O["Generated Answer and Source Metadata"]
+    O --> A
 ```
 
-### Question-answering workflow
+### Question-Answering Workflow
 
 When a user submits a question:
 
@@ -157,11 +162,12 @@ When a user submits a question:
 | Keyword retrieval | BM25 |
 | Embedding framework | Sentence Transformers |
 | Embedding model | all-MiniLM-L6-v2 |
+| Embedding dimension | 384 |
 | Similarity metric | Cosine similarity |
 | Hybrid ranking | Reciprocal Rank Fusion |
 | Local LLM runtime | Ollama |
 | Alternative LLM interface | OpenAI-compatible API |
-| HTTP client | requests, httpx |
+| HTTP clients | requests, httpx |
 | Data validation | Pydantic |
 | Automated testing | Pytest |
 
@@ -171,6 +177,9 @@ When a user submits a question:
 
 ```text
 TrustRAG/
+│
+├── assets/
+│   └── demo.jpeg
 │
 ├── backend/
 │   ├── __init__.py
@@ -215,11 +224,12 @@ TrustRAG/
 ├── .env.example
 ├── .gitignore
 ├── README.md
-├── requirements.txt
-└── trustrag.db
+└── requirements.txt
 ```
 
-The SQLite database is generated locally when the backend initializes. It should generally remain outside version control.
+The SQLite database (`trustrag.db`) is generated locally when the backend initializes. It is excluded from version control and should not be committed to the repository.
+
+The `.venv` directory is also local and excluded from version control.
 
 ---
 
@@ -232,14 +242,16 @@ The SQLite database is generated locally when the backend initializes. It should
 - Ollama for local LLM inference, or access to an OpenAI-compatible API.
 - Sufficient memory and storage for the embedding model and selected LLM.
 
-### Step 1 — Clone the repository
+The project has been developed and tested using Python 3.12.
+
+### Step 1 — Clone the Repository
 
 ```bash
 git clone https://github.com/hamghalam/TrustRAG.git
 cd TrustRAG
 ```
 
-### Step 2 — Create a virtual environment
+### Step 2 — Create a Virtual Environment
 
 Windows PowerShell:
 
@@ -248,7 +260,7 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 ```
 
-### Step 3 — Install dependencies
+### Step 3 — Install Dependencies
 
 ```powershell
 python -m pip install --upgrade pip
@@ -257,7 +269,7 @@ pip install -r requirements.txt
 
 The root requirements file installs the backend and frontend dependencies.
 
-### Step 4 — Configure the LLM provider
+### Step 4 — Configure the LLM Provider
 
 Create a `.env` file in the project root.
 
@@ -274,7 +286,7 @@ TRUSTRAG_LLM_MAX_TOKENS=1024
 
 Make sure Ollama is installed and running.
 
-Download the model:
+Download the example model:
 
 ```powershell
 ollama pull qwen3.5:0.8b
@@ -288,7 +300,11 @@ ollama list
 
 The example uses a small local model for development. Model selection should be based on answer quality, latency, memory requirements, and the intended deployment environment.
 
-### Step 5 — Start the backend
+For an OpenAI-compatible provider, configure the provider and connection settings according to the API being used.
+
+**Important:** Do not commit your `.env` file or API credentials to GitHub.
+
+### Step 5 — Start the Backend
 
 From the project root:
 
@@ -299,10 +315,10 @@ uvicorn backend.app.main:app --reload
 The API will be available at:
 
 - Base URL: http://127.0.0.1:8000
-- API documentation: http://127.0.0.1:8000/docs
+- Interactive API documentation: http://127.0.0.1:8000/docs
 - Health check: http://127.0.0.1:8000/health
 
-### Step 6 — Start the frontend
+### Step 6 — Start the Frontend
 
 Open a second terminal, activate the virtual environment, and run:
 
@@ -316,27 +332,27 @@ Streamlit will provide a local browser interface.
 
 ## 6. Using TrustRAG
 
-### Upload a document
+### Upload a Document
 
 1. Open the Streamlit application.
 2. Navigate to Document Ingestion.
 3. Upload a PDF file.
-4. Select Process Document.
+4. Process the document.
 5. TrustRAG extracts text, creates chunks, generates embeddings, and stores the processed document.
 
-The current upload limit is 10 MB.
+The upload size is subject to the configured backend file-size limit.
 
 The current PDF processing pipeline extracts embedded text. Scanned PDFs that require OCR are not yet supported.
 
-### Search documents
+### Search Documents
 
 Navigate to Search Documents and enter a query.
 
 Choose one of the three retrieval methods:
 
-- **Keyword (BM25):** useful for exact terms, names, and keyword matching.
-- **Semantic:** useful for finding conceptually related passages.
-- **Hybrid:** combines keyword and semantic rankings using RRF.
+- **Keyword (BM25):** Useful for exact terms, names, and keyword matching.
+- **Semantic:** Useful for finding conceptually related passages.
+- **Hybrid:** Combines keyword and semantic rankings using RRF.
 
 Search results include document names, page numbers, chunk identifiers, and retrieval scores.
 
@@ -347,7 +363,7 @@ Navigate to Ask TrustRAG.
 1. Enter a natural-language question.
 2. Select the number of retrieved chunks.
 3. Set the maximum context size.
-4. Select Ask TrustRAG.
+4. Submit the question.
 
 The application retrieves relevant passages using hybrid retrieval, assembles context, and sends it to the configured LLM.
 
@@ -357,7 +373,7 @@ The interface displays:
 - LLM model name.
 - Number of source passages.
 - Context size.
-- Source citations.
+- Source citation labels.
 - Document filenames and page numbers.
 - Retrieval metadata where available.
 
@@ -369,7 +385,7 @@ Interactive API documentation is available at:
 
 http://127.0.0.1:8000/docs
 
-### Available endpoints
+### Available Endpoints
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -384,13 +400,7 @@ http://127.0.0.1:8000/docs
 | GET | `/search/hybrid` | Hybrid retrieval |
 | POST | `/ask` | Generate a grounded answer |
 
-### Search example
-
-```http
-GET /search/hybrid?q=clinical%20risk&limit=5
-```
-
-### Ask endpoint
+### Ask Endpoint
 
 `POST /ask`
 
@@ -440,7 +450,7 @@ Example response structure:
 }
 ```
 
-The response values above are illustrative. Actual values depend on the uploaded documents, retrieval results, and configured model.
+*The response values above are illustrative. Actual values depend on uploaded documents, retrieval results, and the configured model.*
 
 ---
 
@@ -471,7 +481,7 @@ The existing test suite covers:
 - Context assembly.
 - LLM provider integration.
 
-Run tests from the project root so that the backend package imports resolve correctly.
+Run tests from the project root so that backend package imports resolve correctly.
 
 ---
 
@@ -518,6 +528,7 @@ The long-term goal is to evolve TrustRAG from a RAG application foundation into 
 - Context relevance.
 - Citation correctness.
 - Detection of unsupported claims.
+- Evaluation of answer consistency.
 
 ### B. Retrieval Evaluation
 
@@ -525,6 +536,7 @@ The long-term goal is to evolve TrustRAG from a RAG application foundation into 
 - Ranking quality metrics.
 - Retrieval regression testing.
 - Comparison of retrieval configurations.
+- Evaluation using curated query and relevance datasets.
 
 ### C. RAG Security
 
@@ -532,7 +544,7 @@ The long-term goal is to evolve TrustRAG from a RAG application foundation into 
 - Malicious document-content testing.
 - Untrusted-context handling.
 - Security regression tests.
-- Evaluation of unsafe tool-use and instruction-following behavior.
+- Evaluation of unsafe instruction-following behavior.
 
 ### D. Knowledge Quality Management
 
@@ -540,6 +552,7 @@ The long-term goal is to evolve TrustRAG from a RAG application foundation into 
 - Identification of contradictory sources.
 - Document-level quality monitoring.
 - Knowledge-base consistency checks.
+- Tracking changes in document content.
 
 ### E. Production Readiness
 
@@ -548,6 +561,7 @@ The long-term goal is to evolve TrustRAG from a RAG application foundation into 
 - PostgreSQL and vector database integration.
 - Monitoring and observability.
 - Containerized deployment.
+- Production configuration and access control.
 
 ---
 
@@ -561,7 +575,7 @@ Generated answers should be connected to identifiable source documents and passa
 
 Document processing, retrieval, context assembly, storage, and LLM generation should remain independently maintainable.
 
-**Provider flexibility**
+**Provider Flexibility**
 
 Local and cloud LLM providers should be interchangeable without redesigning the retrieval pipeline.
 
@@ -569,11 +583,11 @@ Local and cloud LLM providers should be interchangeable without redesigning the 
 
 Core components should have automated tests and predictable interfaces.
 
-**Security awareness**
+**Security Awareness**
 
 Retrieved documents are untrusted input. Their contents should not be treated as trusted system instructions.
 
-**Incremental development**
+**Incremental Development**
 
 New capabilities should be implemented in manageable stages and validated with tests.
 
@@ -593,13 +607,15 @@ Current limitations include:
 - Automated faithfulness, answer quality, and security evaluation modules are planned rather than implemented.
 - Production authentication, multi-user access control, and deployment hardening are not yet included.
 
-These limitations define areas for future development and evaluation.
+These limitations define important areas for future development and evaluation.
 
 ---
 
 ## 13. License
 
-This project is currently under active development. A formal open-source license will be added before public distribution.
+TrustRAG is currently under active development. A formal open-source license has not yet been added.
+
+Until a license is included in the repository, the project should not be assumed to grant standard open-source reuse, modification, or distribution permissions.
 
 ---
 
@@ -612,3 +628,6 @@ Applied AI Research Scientist
 - GitHub: https://github.com/hamghalam
 - LinkedIn: https://www.linkedin.com/in/hamghalam/
 
+---
+
+*TrustRAG — Building more reliable, transparent, and secure Retrieval-Augmented Generation systems.*

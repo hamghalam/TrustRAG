@@ -4,3 +4,5 @@ streamlit
 requests
 pytest
 pypdf
+httpx
+python-dotenv
