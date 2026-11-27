@@ -11,7 +11,11 @@ Unlike a standalone document chatbot, TrustRAG is being developed with a broader
 **Current development stage:** Functional MVP with PDF ingestion, BM25 and semantic retrieval, hybrid ranking, context assembly, local LLM integration, and a Streamlit question-answering interface.
 
 ---
+## Application Preview
 
+![TrustRAG Dashboard Preview](assets/demo.jpeg)
+
+*Conceptual UI preview of the TrustRAG application.*
 ## 1. Key Features
 
 ### Document ingestion and management
